@@ -1,0 +1,878 @@
+import { useState, type FormEvent } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import confetti from "canvas-confetti";
+import { toast, Toaster } from "sonner";
+import { 
+  Sparkles, 
+  FileText, 
+  Briefcase, 
+  Award, 
+  Zap, 
+  CheckCircle, 
+  ArrowRight, 
+  User, 
+  Settings,
+  BrainCircuit,
+  Globe,
+  Star,
+  ChevronRight,
+  Mail,
+  Lock,
+  ArrowLeft
+} from "lucide-react";
+
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "./components/ui/card";
+import { Input } from "./components/ui/input";
+import { Textarea } from "./components/ui/textarea";
+import { Button } from "./components/ui/button";
+import { Label } from "./components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./components/ui/tabs";
+
+import { BackgroundGlow } from "./components/background-glow";
+import { Navbar } from "./components/navbar";
+import { FeatureSection, SocialProof } from "./components/features";
+import { ResumePreview } from "./components/resume-preview";
+import { Testimonials } from "./components/testimonials";
+
+export default function App() {
+  const pricingPlans = [
+    { name: "Free", amount: 0, price: "$0", points: "1 resume, basic export, AI suggestions" },
+    { name: "Pro", amount: 9, price: "$9/mo", points: "Unlimited resumes, PDF/Word export, template library" },
+    { name: "Team", amount: 29, price: "$29/mo", points: "Team branding, shared templates, admin analytics" },
+  ];
+
+  const [formData, setFormData] = useState({
+    name: "",
+    skills: "",
+    experience: "",
+    title: ""
+  });
+  const [generatedResume, setGeneratedResume] = useState<any>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [activeTab, setActiveTab] = useState("builder");
+  const [isA4PreviewMode, setIsA4PreviewMode] = useState(false);
+  const [showLoginPage, setShowLoginPage] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
+  const [registerForm, setRegisterForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [selectedPlan, setSelectedPlan] = useState(pricingPlans[1]);
+
+  const scrollToSection = (sectionId: string) => {
+    const section = document.getElementById(sectionId);
+    if (section) {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
+  const handleGetStarted = () => {
+    setIsA4PreviewMode(false);
+    setShowLoginPage(false);
+    setActiveTab("builder");
+    setTimeout(() => scrollToSection("builder"), 50);
+  };
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setIsA4PreviewMode(value === "preview");
+  };
+
+  const handleLoginSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (authMode === "login" && (!loginForm.email || !loginForm.password)) {
+      toast.error("Please enter email and password");
+      return;
+    }
+
+    if (authMode === "register") {
+      if (!registerForm.name || !registerForm.email || !registerForm.password || !registerForm.confirmPassword) {
+        toast.error("Please complete all create account fields");
+        return;
+      }
+      if (registerForm.password !== registerForm.confirmPassword) {
+        toast.error("Passwords do not match");
+        return;
+      }
+    }
+
+    toast.success(authMode === "login" ? "Logged in successfully" : "Account created successfully");
+    setShowLoginPage(false);
+    setLoginForm({ email: "", password: "" });
+    setRegisterForm({ name: "", email: "", password: "", confirmPassword: "" });
+    setAuthMode("login");
+  };
+
+  const handleGenerate = async () => {
+    if (!formData.name || !formData.skills || !formData.experience) {
+      toast.error("Please fill in all required fields!");
+      return;
+    }
+
+    setIsGenerating(true);
+    setActiveTab("preview");
+
+    try {
+      const response = await fetch("/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to generate resume");
+      }
+
+      const result = await response.text();
+      const skills = formData.skills.split(',').map(s => s.trim()).filter(s => s);
+
+      setGeneratedResume({
+        name: formData.name,
+        title: formData.title || "Senior Professional",
+        skills: skills,
+        experience: [result],
+        email: `${formData.name.toLowerCase().split(' ')[0]}@example.com`,
+        phone: "+1 (555) 012-3456",
+        location: "San Francisco, CA"
+      });
+
+      confetti({
+        particleCount: 150,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#4f46e5', '#9333ea', '#6366f1']
+      });
+      toast.success("Resume successfully generated by AI!");
+    } catch (error) {
+      console.error('Error:', error);
+      toast.error("Failed to generate resume. Please try again.");
+      setActiveTab("builder");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const loadRazorpayScript = () => {
+    return new Promise<boolean>((resolve) => {
+      if ((window as any).Razorpay) {
+        resolve(true);
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.async = true;
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleRazorpayPayment = async (methodName: string) => {
+    if (selectedPlan.amount <= 0) {
+      toast.info("Free plan does not require payment.");
+      return;
+    }
+
+    const isScriptLoaded = await loadRazorpayScript();
+    if (!isScriptLoaded) {
+      toast.error("Unable to load Razorpay checkout.");
+      return;
+    }
+
+    try {
+      const orderResponse = await fetch("/api/payment/create-order", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          amount: selectedPlan.amount,
+          currency: "INR",
+          plan: selectedPlan.name,
+          method: methodName,
+          userName: registerForm.name || formData.name || "ResuAI User",
+          userEmail: loginForm.email || registerForm.email || `${(formData.name || "user").toLowerCase().replace(/\s+/g, "")}@example.com`,
+        }),
+      });
+
+      if (!orderResponse.ok) {
+        const errorData = await orderResponse.json().catch(() => ({}));
+        throw new Error(errorData.error || "Failed to create payment order");
+      }
+
+      const { key, order } = await orderResponse.json();
+
+      const options = {
+        key,
+        amount: order.amount,
+        currency: order.currency,
+        name: "ResuAI",
+        description: `${selectedPlan.name} Plan Subscription`,
+        order_id: order.id,
+        prefill: {
+          name: registerForm.name || formData.name || "ResuAI User",
+          email: loginForm.email || registerForm.email || `${(formData.name || "user").toLowerCase().replace(/\s+/g, "")}@example.com`,
+        },
+        notes: {
+          plan: selectedPlan.name,
+          method: methodName,
+        },
+        theme: {
+          color: "#4f46e5",
+        },
+        handler: async (paymentResponse: any) => {
+          const verifyResponse = await fetch("/api/payment/verify", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              ...paymentResponse,
+              plan: selectedPlan.name,
+              amount: selectedPlan.amount,
+              method: methodName,
+              userName: registerForm.name || formData.name || "ResuAI User",
+              userEmail: loginForm.email || registerForm.email || `${(formData.name || "user").toLowerCase().replace(/\s+/g, "")}@example.com`,
+            }),
+          });
+
+          if (!verifyResponse.ok) {
+            toast.error("Payment verification failed.");
+            return;
+          }
+
+          const verifyResult = await verifyResponse.json();
+          if (verifyResult.success) {
+            toast.success("Transaction successful. Your plan is now active.");
+          } else {
+            toast.error(verifyResult.error || "Payment verification failed.");
+          }
+        },
+      };
+
+      const razorpay = new (window as any).Razorpay(options);
+      razorpay.on("payment.failed", async (response: any) => {
+        await fetch("/api/payment/fail", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            orderId: order.id,
+            reason: response?.error?.description || "Payment failed",
+          }),
+        }).catch(() => null);
+
+        toast.error(response?.error?.description || "Payment failed. Please try again.");
+      });
+      razorpay.open();
+    } catch (error: any) {
+      toast.error(error?.message || "Unable to start payment.");
+    }
+  };
+
+  return (
+    <div className="min-h-screen w-full selection:bg-indigo-100 selection:text-indigo-900" style={{ fontFamily: 'Inter, sans-serif' }}>
+      <BackgroundGlow />
+      <Navbar onLoginClick={() => setShowLoginPage(true)} onGetStartedClick={handleGetStarted} />
+      <Toaster position="top-center" expand={true} richColors />
+
+      {showLoginPage ? (
+        <main className="pt-32 pb-24 px-6">
+          <section className="max-w-md mx-auto">
+            <Card className="bg-white/90 backdrop-blur-xl border-white/70 shadow-2xl rounded-3xl overflow-hidden border">
+              <CardHeader className="space-y-3">
+                <Button
+                  variant="ghost"
+                  className="w-fit -ml-2"
+                  onClick={() => setShowLoginPage(false)}
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Back
+                </Button>
+                <CardTitle className="text-3xl font-black text-slate-900">Login to ResuAI</CardTitle>
+                <CardDescription className="text-slate-600 text-base">
+                  Save your resume versions, access templates, and download polished files anytime.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-5 grid grid-cols-2 rounded-xl bg-slate-100 p-1">
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("login")}
+                    className={`h-10 rounded-lg font-semibold transition-colors ${
+                      authMode === "login" ? "bg-white text-slate-900 shadow" : "text-slate-500"
+                    }`}
+                  >
+                    Login
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("register")}
+                    className={`h-10 rounded-lg font-semibold transition-colors ${
+                      authMode === "register" ? "bg-white text-slate-900 shadow" : "text-slate-500"
+                    }`}
+                  >
+                    Create Account
+                  </button>
+                </div>
+                <form className="space-y-5" onSubmit={handleLoginSubmit}>
+                  {authMode === "register" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="register-name" className="text-sm font-bold text-slate-700">Full Name</Label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <Input
+                          id="register-name"
+                          type="text"
+                          placeholder="Your full name"
+                          value={registerForm.name}
+                          onChange={(e) => setRegisterForm({ ...registerForm, name: e.target.value })}
+                          className="pl-10 h-11 bg-slate-50 border-slate-200 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <Label htmlFor="login-email" className="text-sm font-bold text-slate-700">Email</Label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <Input
+                        id="login-email"
+                        type="email"
+                        placeholder="you@example.com"
+                        value={authMode === "login" ? loginForm.email : registerForm.email}
+                        onChange={(e) =>
+                          authMode === "login"
+                            ? setLoginForm({ ...loginForm, email: e.target.value })
+                            : setRegisterForm({ ...registerForm, email: e.target.value })
+                        }
+                        className="pl-10 h-11 bg-slate-50 border-slate-200 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="login-password" className="text-sm font-bold text-slate-700">Password</Label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                      <Input
+                        id="login-password"
+                        type="password"
+                        placeholder="Enter your password"
+                        value={authMode === "login" ? loginForm.password : registerForm.password}
+                        onChange={(e) =>
+                          authMode === "login"
+                            ? setLoginForm({ ...loginForm, password: e.target.value })
+                            : setRegisterForm({ ...registerForm, password: e.target.value })
+                        }
+                        className="pl-10 h-11 bg-slate-50 border-slate-200 rounded-xl"
+                      />
+                    </div>
+                  </div>
+
+                  {authMode === "register" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="register-confirm" className="text-sm font-bold text-slate-700">Confirm Password</Label>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                        <Input
+                          id="register-confirm"
+                          type="password"
+                          placeholder="Re-enter password"
+                          value={registerForm.confirmPassword}
+                          onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
+                          className="pl-10 h-11 bg-slate-50 border-slate-200 rounded-xl"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <Button type="submit" className="w-full h-12 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
+                    {authMode === "login" ? "Log in" : "Create Account"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full h-12 rounded-xl"
+                    onClick={handleGetStarted}
+                  >
+                    Continue as guest
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </section>
+        </main>
+      ) : isA4PreviewMode ? (
+        <main className="pt-32 pb-24 px-6">
+          <section className="max-w-7xl mx-auto">
+            <div className="flex flex-wrap gap-3 justify-between items-center mb-6">
+              <h2 className="text-3xl font-black text-slate-900 tracking-tight">A4 Resume Preview</h2>
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => {
+                    setIsA4PreviewMode(false);
+                    setActiveTab("builder");
+                  }}
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Back to Builder
+                </Button>
+              </div>
+            </div>
+            <ResumePreview
+              data={generatedResume}
+              isGenerating={isGenerating}
+              isA4Mode={true}
+              onUpdateData={(next) => setGeneratedResume(next)}
+            />
+          </section>
+        </main>
+      ) : (
+        <>
+        <main className="pt-32 pb-24">
+        {/* Hero Section */}
+        <section id="builder" className="max-w-7xl mx-auto px-6 mb-20">
+          <div className="flex flex-col lg:flex-row gap-16 items-center">
+            {/* Left side: Info */}
+            <div className="flex-1 space-y-8">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/60 backdrop-blur-xl border border-white/80 shadow-sm text-indigo-600 font-semibold text-sm"
+              >
+                <div className="flex -space-x-1.5">
+                  {[1, 2, 3].map(i => (
+                    <div key={`hero-avatar-${i}`} className="w-5 h-5 rounded-full border-2 border-white bg-indigo-100" />
+                  ))}
+                </div>
+                <span className="ml-1 tracking-tight">Joined by 2,000+ this month</span>
+              </motion.div>
+
+              <motion.h1 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="text-6xl lg:text-7xl font-black text-slate-900 tracking-tighter leading-[0.95]"
+              >
+                Your career deserves a <span className="bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">premium</span> story.
+              </motion.h1>
+
+              <motion.p 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="text-xl text-slate-600 max-w-xl leading-relaxed font-medium"
+              >
+                Stop struggling with templates. Our AI understands your unique impact and translates it into a resume that recruiters can't ignore.
+              </motion.p>
+
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="flex flex-wrap gap-4 pt-4"
+              >
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 font-bold text-sm">
+                  <CheckCircle className="w-4 h-4" /> 100% Free to Try
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 font-bold text-sm">
+                  <Zap className="w-4 h-4" /> ATS-Optimized
+                </div>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-purple-50 text-purple-700 font-bold text-sm">
+                  <Star className="w-4 h-4" /> 4.9/5 Rating
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Right side: Interactive Form/Preview Container */}
+            <div className="flex-1 w-full max-w-2xl">
+              <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-8 bg-white/50 backdrop-blur-xl border border-white/60 p-1.5 rounded-2xl h-14 shadow-lg shadow-indigo-100/30">
+                  <TabsTrigger 
+                    value="builder" 
+                    className="rounded-xl data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm font-bold text-[15px] transition-all"
+                  >
+                    <Settings className="w-4 h-4 mr-2" />
+                    Builder
+                  </TabsTrigger>
+                  <TabsTrigger 
+                    value="preview" 
+                    className="rounded-xl data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm font-bold text-[15px] transition-all"
+                  >
+                    <FileText className="w-4 h-4 mr-2" />
+                    Preview
+                  </TabsTrigger>
+                </TabsList>
+
+                <AnimatePresence mode="wait">
+                  {activeTab === "builder" ? (
+                    <TabsContent value="builder" key="builder-tab" forceMount>
+                      <motion.div
+                        initial={{ opacity: 0, x: -20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: 20 }}
+                      >
+                        <Card className="bg-white/80 backdrop-blur-xl border-white/60 shadow-2xl rounded-[2rem] overflow-hidden border">
+                          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 blur-3xl -z-10" />
+                          <CardHeader className="pb-4">
+                            <CardTitle className="text-2xl font-black text-slate-800 flex items-center gap-3">
+                              <div className="p-2 bg-indigo-600 rounded-xl">
+                                <BrainCircuit className="w-6 h-6 text-white" />
+                              </div>
+                              Resume Designer
+                            </CardTitle>
+                            <CardDescription className="text-[15px] font-medium text-slate-500">
+                              Our AI will generate your content based on these inputs.
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="space-y-6">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor="name" className="text-sm font-bold text-slate-700">Full Name</Label>
+                                <div className="relative">
+                                  <User className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                                  <Input 
+                                    id="name" 
+                                    placeholder="Jane Doe" 
+                                    value={formData.name}
+                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    className="pl-10 h-11 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-indigo-500/20 rounded-xl"
+                                  />
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor="title" className="text-sm font-bold text-slate-700">Target Role</Label>
+                                <div className="relative">
+                                  <Briefcase className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                                  <Input 
+                                    id="title" 
+                                    placeholder="Senior Designer" 
+                                    value={formData.title}
+                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                    className="pl-10 h-11 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-indigo-500/20 rounded-xl"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="skills" className="text-sm font-bold text-slate-700">Key Skills (comma separated)</Label>
+                              <div className="relative">
+                                <Award className="absolute left-3 top-3 w-4 h-4 text-slate-400" />
+                                <Input 
+                                  id="skills" 
+                                  placeholder="React, Figma, Tailwind, Strategy" 
+                                  value={formData.skills}
+                                  onChange={(e) => setFormData({ ...formData, skills: e.target.value })}
+                                  className="pl-10 h-11 bg-slate-50 border-slate-200 focus:ring-2 focus:ring-indigo-500/20 rounded-xl"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor="experience" className="text-sm font-bold text-slate-700">Experience Highlights</Label>
+                              <Textarea 
+                                id="experience" 
+                                placeholder="Describe your achievements and roles..." 
+                                value={formData.experience}
+                                onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
+                                className="min-h-[140px] bg-slate-50 border-slate-200 focus:ring-2 focus:ring-indigo-500/20 rounded-xl p-4 leading-relaxed"
+                              />
+                              <p className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
+                                <Sparkles className="w-3 h-3" /> Tip: Bullet points or paragraphs work great!
+                              </p>
+                            </div>
+
+                            <Button 
+                              onClick={handleGenerate}
+                              disabled={isGenerating}
+                              className="group relative w-full h-14 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-lg font-black transition-all shadow-xl shadow-indigo-200 overflow-hidden"
+                            >
+                              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500 to-purple-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                              <div className="relative flex items-center justify-center gap-3">
+                                {isGenerating ? (
+                                  <>
+                                    <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <span>Brewing AI Magic...</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Zap className="w-5 h-5 fill-white" />
+                                    <span>Generate Resume</span>
+                                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                                  </>
+                                )}
+                              </div>
+                            </Button>
+                          </CardContent>
+                        </Card>
+                      </motion.div>
+                    </TabsContent>
+                  ) : (
+                    <TabsContent value="preview" key="preview-tab" forceMount>
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.95 }}
+                        className="space-y-4"
+                      >
+                        <Button
+                          onClick={() => setIsA4PreviewMode(true)}
+                          className="w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold"
+                        >
+                          Open Full Page A4 Preview
+                        </Button>
+                        <ResumePreview
+                          data={generatedResume}
+                          isGenerating={isGenerating}
+                          onUpdateData={(next) => setGeneratedResume(next)}
+                        />
+                      </motion.div>
+                    </TabsContent>
+                  )}
+                </AnimatePresence>
+              </Tabs>
+            </div>
+          </div>
+        </section>
+
+        <SocialProof />
+        <FeatureSection />
+
+        <section id="templates" className="max-w-7xl mx-auto px-6 py-16">
+          <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Templates That Work</h2>
+          <p className="text-slate-600 mb-8 max-w-3xl">Choose layouts based on your career level and role. Each template is designed for readability, ATS checks, and recruiter scanning.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { name: "Modern", text: "Balanced white space, clean headers, and skill-first structure." },
+              { name: "Executive", text: "Leadership-focused with impact metrics and achievement summary." },
+              { name: "Creative", text: "Stronger visual hierarchy for design, marketing, and product roles." }
+            ].map((template) => (
+              <Card key={template.name} className="bg-white/70 border-white/70 rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold">{template.name}</CardTitle>
+                  <CardDescription>{template.text}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    variant="outline"
+                    className="w-full rounded-xl"
+                    onClick={() => {
+                      setActiveTab("builder");
+                      toast.success(`${template.name} template selected`);
+                    }}
+                  >
+                    Use {template.name}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section id="pricing" className="max-w-7xl mx-auto px-6 py-16">
+          <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Simple Pricing</h2>
+          <p className="text-slate-600 mb-8 max-w-3xl">Start free and only upgrade when you need premium exports and unlimited versions.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {pricingPlans.map((plan) => (
+              <Card key={plan.name} className="bg-white/70 border-white/70 rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="flex justify-between items-center text-xl font-bold">
+                    <span>{plan.name}</span>
+                    <span className="text-indigo-600">{plan.price}</span>
+                  </CardTitle>
+                  <CardDescription>{plan.points}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    className="w-full rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
+                    onClick={() => {
+                      setSelectedPlan(plan);
+                      scrollToSection("payment-method");
+                      toast.info(`${plan.name} plan selected`);
+                    }}
+                  >
+                    Choose {plan.name}
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section id="payment-method" className="max-w-7xl mx-auto px-6 py-16">
+          <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Payment Method</h2>
+          <p className="text-slate-600 mb-8 max-w-3xl">
+            Select your preferred payment option to continue with your plan.
+            <span className="font-semibold text-slate-800"> Selected Plan: {selectedPlan.name} ({selectedPlan.price})</span>
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { name: "Credit / Debit Card", desc: "Visa, MasterCard, RuPay, American Express" },
+              { name: "UPI", desc: "Pay instantly with any UPI app" },
+              { name: "Net Banking", desc: "Use internet banking from supported banks" }
+            ].map((method) => (
+              <Card key={method.name} className="bg-white/70 border-white/70 rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-xl font-bold">{method.name}</CardTitle>
+                  <CardDescription>{method.desc}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Button
+                    className="w-full rounded-xl bg-slate-900 hover:bg-slate-800 text-white"
+                    onClick={() => handleRazorpayPayment(method.name)}
+                  >
+                    Continue
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <section id="blog" className="max-w-7xl mx-auto px-6 py-16">
+          <h2 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">Career Blog</h2>
+          <p className="text-slate-600 mb-8 max-w-3xl">Practical writing tips, interview insights, and ATS strategy guides updated weekly.</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              "How to write impact-driven experience bullets",
+              "ATS resume checklist for 2026 applications",
+              "Common resume mistakes that block interviews"
+            ].map((article) => (
+              <Card key={article} className="bg-white/70 border-white/70 rounded-2xl">
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold leading-snug">{article}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Button variant="outline" className="rounded-xl w-full">Read Article</Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        <Testimonials />
+
+        {/* Call to Action */}
+        <section className="max-w-7xl mx-auto px-6 mt-12">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="p-16 rounded-[3rem] bg-indigo-600 relative overflow-hidden text-center text-white"
+          >
+            {/* Background pattern */}
+            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#fff_1px,transparent_1px)] [background-size:20px_20px]" />
+            <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[300px] bg-white/20 blur-[120px] rounded-full -translate-y-1/2" />
+            
+            <div className="relative z-10 space-y-8 max-w-3xl mx-auto">
+              <h2 className="text-5xl font-black tracking-tighter leading-none">Ready to land your dream role?</h2>
+              <p className="text-xl text-indigo-100 font-medium">Join 12,000+ others who stopped struggling with formatting and started getting interviews.</p>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  size="lg"
+                  className="h-16 px-10 rounded-2xl bg-white text-indigo-600 hover:bg-indigo-50 text-xl font-black shadow-2xl"
+                  onClick={handleGetStarted}
+                >
+                  Build My Resume Now
+                  <ArrowRight className="w-6 h-6 ml-2" />
+                </Button>
+                <Button
+                  size="lg"
+                  className="h-16 px-10 rounded-2xl border-2 border-amber-200 bg-amber-300 text-slate-900 hover:bg-amber-200 text-xl font-black backdrop-blur-md"
+                  onClick={() => scrollToSection("templates")}
+                >
+                  Browse Templates
+                </Button>
+              </div>
+              <div className="flex items-center justify-center gap-8 pt-4">
+                <div className="flex items-center gap-2"><Globe className="w-5 h-5" /> Used in 120+ countries</div>
+                <div className="flex items-center gap-2 text-indigo-200">|</div>
+                <div className="flex items-center gap-2"><CheckCircle className="w-5 h-5" /> Secured by AES-256</div>
+              </div>
+            </div>
+          </motion.div>
+        </section>
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-slate-900 pt-24 pb-12 text-slate-400">
+        <div className="max-w-7xl mx-auto px-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-12 mb-20">
+            <div className="col-span-2">
+              <div className="flex items-center gap-2 mb-6">
+                <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-white" />
+                </div>
+                <span className="text-2xl font-black tracking-tight text-white">Resu<span className="text-indigo-400">AI</span></span>
+              </div>
+              <p className="max-w-xs mb-8 text-[15px] leading-relaxed">
+                The most advanced AI resume builder on the market. Craft premium, ATS-optimized resumes in minutes.
+              </p>
+              <div className="flex gap-4">
+                {[1, 2, 3, 4].map(i => (
+                  <div key={i} className="w-10 h-10 rounded-xl bg-slate-800 flex items-center justify-center hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer" />
+                ))}
+              </div>
+            </div>
+            <div>
+              <h4 className="text-white font-bold mb-6 uppercase tracking-wider text-xs">Product</h4>
+              <ul className="space-y-4 text-sm font-medium">
+                <li><a href="#builder" className="hover:text-white transition-colors">Resume Builder</a></li>
+                <li><a href="#blog" className="hover:text-white transition-colors">Cover Letter Tips</a></li>
+                <li><a href="#pricing" className="hover:text-white transition-colors">Pricing</a></li>
+                <li><a href="#templates" className="hover:text-white transition-colors">Templates</a></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-bold mb-6 uppercase tracking-wider text-xs">Company</h4>
+              <ul className="space-y-4 text-sm font-medium">
+                <li><button onClick={() => toast.info("About page coming soon")} className="hover:text-white cursor-pointer transition-colors">About Us</button></li>
+                <li><button onClick={() => toast.info("Careers page coming soon")} className="hover:text-white cursor-pointer transition-colors">Careers</button></li>
+                <li><button onClick={() => toast.info("Privacy policy coming soon")} className="hover:text-white cursor-pointer transition-colors">Privacy</button></li>
+                <li><button onClick={() => toast.info("Terms page coming soon")} className="hover:text-white cursor-pointer transition-colors">Terms</button></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-bold mb-6 uppercase tracking-wider text-xs">Resources</h4>
+              <ul className="space-y-4 text-sm font-medium">
+                <li><a href="#blog" className="hover:text-white transition-colors">Blog</a></li>
+                <li><button onClick={() => toast.info("Help center is coming soon")} className="hover:text-white cursor-pointer transition-colors">Help Center</button></li>
+                <li><a href="#blog" className="hover:text-white transition-colors">Career Guide</a></li>
+                <li><button onClick={() => toast.info("API docs are coming soon")} className="hover:text-white cursor-pointer transition-colors">API Docs</button></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="text-white font-bold mb-6 uppercase tracking-wider text-xs">Social</h4>
+              <ul className="space-y-4 text-sm font-medium">
+                <li><a href="https://twitter.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Twitter</a></li>
+                <li><a href="https://linkedin.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">LinkedIn</a></li>
+                <li><a href="https://instagram.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Instagram</a></li>
+                <li><a href="https://discord.com" target="_blank" rel="noreferrer" className="hover:text-white transition-colors">Discord</a></li>
+              </ul>
+            </div>
+          </div>
+          <div className="pt-12 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center gap-6 text-sm font-medium">
+            <p>© 2026 ResuAI. All rights reserved.</p>
+            <div className="flex gap-8">
+              <button onClick={() => toast.info("Privacy policy coming soon")} className="hover:text-white transition-colors">Privacy Policy</button>
+              <button onClick={() => toast.info("Terms coming soon")} className="hover:text-white transition-colors">Terms of Service</button>
+              <button onClick={() => toast.info("Cookie settings coming soon")} className="hover:text-white transition-colors">Cookie Settings</button>
+            </div>
+          </div>
+        </div>
+      </footer>
+      </>
+      )}
+    </div>
+  );
+}
