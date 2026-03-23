@@ -2,6 +2,25 @@
 
 A full-stack AI-powered resume builder that helps users generate, edit, preview, export, and monetize professional resumes.
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Open-22c55e?style=for-the-badge&logo=vercel&logoColor=white)](https://your-live-demo-link.com)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-111827?style=for-the-badge&logo=github&logoColor=white)](https://github.com/harsh0707005-web/ai-resume-builder)
+
+## Portfolio Card (Copy/Paste)
+
+Use this block in your main portfolio repository:
+
+```md
+### AI Resume Builder
+
+Full-stack AI-powered resume builder with live editing, A4 preview, PDF export, authentication, and Razorpay payment integration.
+
+[Live Demo](https://your-live-demo-link.com) | [Source Code](https://github.com/harsh0707005-web/ai-resume-builder)
+
+**Tech:** React, TypeScript, Vite, Node.js, Express, MongoDB, Razorpay
+```
+
+Note: replace `https://your-live-demo-link.com` with your deployed URL (Vercel/Netlify/Render).
+
 ## Portfolio Summary
 
 AI Resume Builder is an end-to-end product project that combines AI content generation, modern UI/UX, PDF export, user authentication, and Razorpay payment integration.
